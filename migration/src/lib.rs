@@ -28,6 +28,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240510_081433_index_users_unique_name::Migration),
             Box::new(m20240608_160157_submissions::Migration),
             Box::new(m20240525_133501_problems::Migration),
+            Box::new(m20240608_160157_submissions::Migration),
             Box::new(m20240609_093230_problem_tasks::Migration),
         ]
     }
