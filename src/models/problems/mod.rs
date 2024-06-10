@@ -72,7 +72,8 @@ pub struct AddParams {
 pub struct ListParams {
     pub viewer: _entities::users::Model,
     pub offset: Option<usize>,
-    pub count: Option<usize>,
+    /// how many problems to return, -1 to return all
+    pub count: Option<i32>,
     pub name: Option<String>,
     pub tags: Option<Vec<String>>,
     pub course: Option<String>,
@@ -136,6 +137,7 @@ impl _entities::problems::Model {
 
         let mut q = Problems::find().order_by(problems::Column::Id, Order::Asc);
 
+        // TODO: fuzz search
         if let Some(name) = &params.name {
             q = q.filter(problems::Column::Name.eq(name));
         }
@@ -144,7 +146,12 @@ impl _entities::problems::Model {
         // TODO: permission check
 
         let offset = params.offset.unwrap_or(0);
-        let count = params.count.unwrap_or(usize::MAX);
+        let count = params.count.unwrap_or(10);
+        let count = if count < 0 {
+            usize::MAX
+        } else {
+            count as usize
+        };
         let problems = problems.skip(offset).take(count);
 
         Ok(problems.collect())

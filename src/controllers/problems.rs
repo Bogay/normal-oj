@@ -58,7 +58,8 @@ async fn create(
 #[derive(Debug, Deserialize)]
 pub struct ListProblemRequest {
     pub offset: Option<usize>,
-    pub count: Option<usize>,
+    /// how many problems to return, -1 to return all
+    pub count: Option<i32>,
     pub name: Option<String>,
     pub tags: Option<String>,
     pub course: Option<String>,
