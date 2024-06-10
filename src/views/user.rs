@@ -22,6 +22,7 @@ impl CurrentResponse {
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserInfoResponse {
     pub username: String,
     pub displayed_name: String,
