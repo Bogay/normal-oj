@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use cookie::SameSite;
 use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -9,7 +10,7 @@ use crate::{
         _entities::courses,
         users::{self, LoginParams, RegisterParams, Role},
     },
-    views::{auth::LoginResponse, NojResponseBuilder},
+    views::{auth::LoginResponse, user::UserInfoResponse, NojResponseBuilder},
 };
 
 use super::find_user_by_auth;
@@ -176,6 +177,8 @@ async fn login(State(ctx): State<AppContext>, Json(params): Json<LoginParams>) -
     let cookie = {
         let mut c = cookie::Cookie::new("piann", &token);
         c.set_http_only(true);
+        c.set_path("/");
+        c.set_same_site(SameSite::Lax);
         c.set_expires(
             time::OffsetDateTime::now_utc() + time::Duration::seconds(jwt_secret.expiration as i64),
         );
@@ -291,12 +294,7 @@ async fn me(State(ctx): State<AppContext>, auth: auth::JWT) -> Result<Response> 
         Err(e) => return e,
     };
 
-    format::json(
-        NojResponseBuilder::new(serde_json::json!({
-            "username": user.name,
-        }))
-        .done(),
-    )
+    format::json(NojResponseBuilder::new(UserInfoResponse::new(&user)).done())
 }
 
 pub fn routes() -> Routes {
