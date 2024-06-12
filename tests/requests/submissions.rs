@@ -1,5 +1,7 @@
+use crate::requests::create_cookie;
+
 use super::prepare_data;
-use loco_rs::{app::AppContext, testing};
+use loco_rs::{app::AppContext, prelude::cookie::Cookie, testing};
 use serde_json::json;
 use serial_test::serial;
 
@@ -77,6 +79,59 @@ async fn create_submission() {
             .post("/api/submissions")
             .add_header(auth_key, auth_value)
             .json(&create_submission_payload(problem.id))
+            .await;
+        response.assert_status_ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn upload_submission_code() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, ctx| async move {
+        testing::seed::<App>(&ctx.db).await.unwrap();
+
+        let user = prepare_data::init_user_login(&request, &ctx).await;
+        let problem = create_problem(&ctx).await;
+
+        let cookie = create_cookie(&user.token);
+        // let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let response = request
+            .post("/api/submissions")
+            // .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
+            .json(&create_submission_payload(problem.id))
+            .await;
+        response.assert_status_ok();
+        let submission_id = response
+            .json::<serde_json::Value>()
+            .as_object()
+            .unwrap()
+            .get("id")
+            .unwrap()
+            .as_i64()
+            .unwrap();
+
+        let code = r#"#include <stdio.h>
+        int main()
+        {
+            int a, b;
+            scanf("%d%d", &a, &b);
+            printf("%d\n", a + b);
+
+            return 0;
+        }
+        "#;
+
+        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let response = request
+            .put(&format!("/api/submissions/{submission_id}"))
+            .add_header(auth_key, auth_value)
+            .json(&json!({
+                "code": code,
+            }))
             .await;
         response.assert_status_ok();
     })
