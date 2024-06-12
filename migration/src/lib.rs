@@ -13,6 +13,7 @@ mod m20240510_081433_index_users_unique_name;
 mod m20240525_133501_problems;
 mod m20240608_160157_submissions;
 mod m20240609_093230_problem_tasks;
+mod m20240612_192624_alter_submissions_add_code;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -30,6 +31,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240525_133501_problems::Migration),
             Box::new(m20240608_160157_submissions::Migration),
             Box::new(m20240609_093230_problem_tasks::Migration),
+            Box::new(m20240612_192624_alter_submissions_add_code::Migration),
         ]
     }
 }

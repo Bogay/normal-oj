@@ -2,7 +2,10 @@ pub mod descriptions;
 pub mod tasks;
 pub mod test_case;
 
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use super::_entities::{self, prelude::Problems, problems};
 use crate::models::transform_db_error;
@@ -31,6 +34,8 @@ pub enum Error {
     PermissionDenied,
     #[error("bad test cacse: {0}")]
     BadTestCase(BadTestCase),
+    #[error("test case hasn't been uploaded for problem")]
+    NoTestCase,
 }
 
 #[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, PartialEq, Eq, FromPrimitive)]
@@ -263,6 +268,12 @@ impl _entities::problems::Model {
         }
 
         Ok(())
+    }
+
+    pub fn test_case_path(&self) -> Option<PathBuf> {
+        self.test_case_id
+            .as_ref()
+            .map(|i| PathBuf::from("test-case").join(format!("{i}.zip")))
     }
 }
 

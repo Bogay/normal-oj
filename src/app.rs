@@ -58,6 +58,7 @@ impl Hooks for App {
     }
 
     fn connect_workers<'a>(p: &'a mut Processor, ctx: &'a AppContext) {
+        p.register(crate::workers::submission::SubmissionWorker::build(ctx));
         p.register(DownloadWorker::build(ctx));
     }
 

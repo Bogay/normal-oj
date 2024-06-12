@@ -152,17 +152,18 @@ async fn upload_test_case(
     tracing::info!(problem_id = prob.id, "test case validated");
 
     let test_case_id = uuid::Uuid::new_v4();
-    let file_name = format!("{test_case_id}.zip");
-    let path = PathBuf::from("test-case").join(file_name);
+    let prob = prob
+        .into_active_model()
+        .update_test_case_id(&ctx.db, Some(test_case_id.to_string()))
+        .await?;
+
+    // because we just set its test case id, it's safe to unwrap()
+    let path = prob.test_case_path().unwrap();
     ctx.storage
         .as_ref()
         .upload(path.as_path(), &file_content)
         .await?;
     tracing::info!(test_case_id = ?test_case_id, "test case uploaded");
-
-    prob.into_active_model()
-        .update_test_case_id(&ctx.db, Some(test_case_id.to_string()))
-        .await?;
 
     format::empty_json()
 }
