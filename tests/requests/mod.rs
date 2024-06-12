@@ -1,6 +1,7 @@
 mod auth;
 mod prepare_data;
 mod problems;
+mod submissions;
 mod user;
 
 use loco_rs::app::AppContext;

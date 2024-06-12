@@ -17,7 +17,9 @@ use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 
 use crate::{
     controllers,
-    models::_entities::{courses, problem_descriptions, problem_tasks, problems, users},
+    models::_entities::{
+        courses, problem_descriptions, problem_tasks, problems, submissions, users,
+    },
     tasks,
     workers::downloader::DownloadWorker,
 };
@@ -51,6 +53,7 @@ impl Hooks for App {
             .add_route(controllers::notes::routes())
             .add_route(controllers::auth::routes())
             .add_route(controllers::user::routes())
+            .add_route(controllers::submissions::routes())
     }
 
     fn connect_workers<'a>(p: &'a mut Processor, ctx: &'a AppContext) {
@@ -62,6 +65,7 @@ impl Hooks for App {
     }
 
     async fn truncate(db: &DatabaseConnection) -> Result<()> {
+        truncate_table(db, submissions::Entity).await?;
         truncate_table(db, problem_tasks::Entity).await?;
         truncate_table(db, problems::Entity).await?;
         truncate_table(db, courses::Entity).await?;
@@ -84,6 +88,7 @@ impl Hooks for App {
             "problems",
             "problem_descriptions",
             "problem_tasks",
+            "submissions",
         ];
         for table in tables {
             db.execute(Statement::from_string(
