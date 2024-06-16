@@ -1,8 +1,9 @@
 use loco_rs::prelude::*;
 use sea_orm::{Order, QueryOrder};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::_entities::prelude::Submissions;
+use super::_entities::problems;
 pub use super::_entities::sea_orm_active_enums::{Language, SubmissionStatus};
 pub use super::_entities::submissions::{self, ActiveModel, Model};
 
@@ -25,8 +26,34 @@ pub struct ListParams {
     pub course: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JudgeResult {
+    pub status: String,
+    pub duration: i32,
+    pub mem_usage: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub task_id: i32,
+    pub case_id: i32,
+    // exit_msg: String,
+}
+
 impl ActiveModelBehavior for ActiveModel {
     // extend activemodel below (keep comment for generators)
+}
+
+pub fn status_str_to_i32(s: &str) -> i32 {
+    match s {
+        "AC" => 0,
+        "WA" => 1,
+        "CE" => 2,
+        "TLE" => 3,
+        "MLE" => 4,
+        "RE" => 5,
+        "JE" => 6,
+        "OLE" => 7,
+        _ => -2,
+    }
 }
 
 impl ActiveModel {
@@ -38,10 +65,48 @@ impl ActiveModel {
     pub async fn update_sandbox_result<C: ConnectionTrait>(
         mut self,
         db: &C,
-        score: i32,
-        exec_time: i32,
-        memory_usage: i32,
+        problem: &problems::Model,
+        results: Vec<Vec<JudgeResult>>,
     ) -> ModelResult<Model> {
+        self.tasks = ActiveValue::set(Some(serde_json::to_value(&results).map_err(Box::from)?));
+
+        let mut exec_time = i32::MAX;
+        let mut memory_usage = i32::MAX;
+        let mut score = 0;
+        let mut status = -2;
+
+        let tasks = problem.tasks(db).await?;
+
+        for (task, rs) in tasks.iter().zip(&results) {
+            if rs.len() != task.test_case_count as usize {
+                tracing::warn!("result dismatch");
+            }
+
+            if rs.iter().all(|r| r.status == "AC") {
+                score += task.score;
+            }
+
+            for r in rs {
+                // faster
+                if (r.duration < exec_time)
+                    // as fast, but less memory
+                    || (r.duration == exec_time && r.mem_usage < memory_usage)
+                {
+                    exec_time = r.duration;
+                    memory_usage = r.mem_usage;
+                }
+
+                let r_status = status_str_to_i32(&r.status);
+                if r_status < 0 {
+                    continue;
+                }
+                if status < 0 || r_status < status {
+                    status = r_status;
+                }
+            }
+        }
+
+        self.status = ActiveValue::set(SubmissionStatus::try_from(status).unwrap());
         self.score = ActiveValue::set(score);
         self.exec_time = ActiveValue::set(exec_time);
         self.memory_usage = ActiveValue::set(memory_usage);

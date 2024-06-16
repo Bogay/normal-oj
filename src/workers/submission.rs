@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     problems,
-    submissions::{self, Language},
+    submissions::{self, JudgeResult, Language},
 };
 
 /// Response to execute submissions
@@ -24,16 +24,6 @@ impl worker::AppWorker<SubmissionWorkerArgs> for SubmissionWorker {
     fn build(ctx: &AppContext) -> Self {
         Self { ctx: ctx.clone() }
     }
-}
-
-#[derive(Debug, Clone)]
-struct JudgeResult {
-    status: String,
-    duration: i32,
-    mem_usage: i32,
-    stdout: String,
-    stderr: String,
-    // exit_msg: String,
 }
 
 impl SubmissionWorker {
@@ -81,8 +71,15 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
         // compile submission if needed
         let dup_judge_results = |r: &JudgeResult, p: &[problems::tasks::Model]| {
             let mut all = vec![];
-            for t in p {
-                all.push(vec![r.clone(); t.test_case_count as usize]);
+            for (i, t) in p.iter().enumerate() {
+                let mut seg = vec![];
+                for j in 0..t.test_case_count {
+                    let mut rs = r.clone();
+                    rs.task_id = i as i32;
+                    rs.case_id = j;
+                    seg.push(rs);
+                }
+                all.push(seg);
             }
             all
         };
@@ -110,11 +107,17 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                         status: "CE".to_string(),
                         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
                         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                        task_id: 0,
+                        case_id: 0,
                         // TODO: use real data
                         duration: 1000,
                         mem_usage: 32768,
                     };
                     let all_results = dup_judge_results(&result, &tasks);
+                    subm.into_active_model()
+                        .update_sandbox_result(db, &problem, all_results)
+                        .await
+                        .map_err(Box::from)?;
                     return Ok(());
                 }
             }
@@ -140,11 +143,17 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                         status: "CE".to_string(),
                         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
                         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                        task_id: 0,
+                        case_id: 0,
                         // TODO: use real data
                         duration: 1000,
                         mem_usage: 32768,
                     };
                     let all_results = dup_judge_results(&result, &tasks);
+                    subm.into_active_model()
+                        .update_sandbox_result(db, &problem, all_results)
+                        .await
+                        .map_err(Box::from)?;
                     return Ok(());
                 }
             }
@@ -185,7 +194,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
         let problem_dir = problem_dir.canonicalize().map_err(Box::from)?;
 
         // collect judge results
-        let mut all_judge_results = vec![];
+        let mut all_judge_results: Vec<Vec<JudgeResult>> = vec![];
         for (i, task) in tasks.iter().enumerate() {
             let mut task_results = vec![];
             for j in 0..task.test_case_count {
@@ -201,14 +210,13 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                 let stdout_str = stdout_path.to_string_lossy();
                 let stderr_str = stderr_path.to_string_lossy();
                 let output_str = output_path.to_string_lossy();
-                let cwd = submission_dir.path().to_string_lossy();
                 let time_limit = task.time_limit;
                 let memory_limit = task.memory_limit;
                 let lang: i32 = subm.language.clone().into();
 
                 // save config to disk
                 let config = toml::toml! {
-                    cwd = cwd
+                    cwd = "."
                     large-stack = true
                     max-process = 10
                     memory-limit = memory_limit
@@ -232,8 +240,9 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
 
                 // invoke sandbox process
                 // TODO: configurable sandbox path
-                let sandbox_output = Command::new("./sandbox")
+                let sandbox_output = Command::new("sandbox")
                     .args(["--env-path", &config_path.to_string_lossy().to_string()])
+                    .current_dir(&submission_dir)
                     .output();
                 match sandbox_output {
                     Ok(o) if !o.status.success() => {
@@ -243,6 +252,8 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             mem_usage: -1,
                             stdout: String::from_utf8_lossy(&o.stdout).to_string(),
                             stderr: String::from_utf8_lossy(&o.stderr).to_string(),
+                            task_id: 0,
+                            case_id: 0,
                         })
                     }
                     Ok(_) => {
@@ -274,7 +285,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             match s.as_str() {
                                 "TLE" | "MLE" | "RE" | "OLE" => s,
                                 _ => {
-                                    if Self::compare_output(&answer, &s) {
+                                    if Self::compare_output(&answer, &stdout) {
                                         "AC".to_string()
                                     } else {
                                         "WA".to_string()
@@ -289,6 +300,8 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             mem_usage: mem_usage_kb,
                             stdout,
                             stderr,
+                            task_id: i as i32,
+                            case_id: j,
                         })
                     }
                     Err(e) => {
@@ -298,6 +311,8 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             mem_usage: -1,
                             stdout: String::new(),
                             stderr: e.to_string(),
+                            task_id: i as i32,
+                            case_id: j,
                         })
                     }
                 }
@@ -305,21 +320,12 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
             all_judge_results.push(task_results);
         }
 
-        let score = if all_judge_results
-            .into_iter()
-            .flatten()
-            .all(|r| r.status == "WA")
-        {
-            100
-        } else {
-            0
-        };
-
         // upload judge result
         subm.into_active_model()
-            .update_sandbox_result(db, score, 100, 100)
+            .update_sandbox_result(db, &problem, all_judge_results)
             .await
             .map_err(Box::from)?;
+
         Ok(())
     }
 }

@@ -21,7 +21,7 @@ use sea_orm::ConnectionTrait;
 use std::io::Write;
 use zip::write::SimpleFileOptions;
 
-async fn make_test_case<C: ConnectionTrait>(
+pub async fn make_test_case<C: ConnectionTrait>(
     db: &C,
     problem: &problems::Model,
 ) -> zip::result::ZipResult<Vec<u8>> {

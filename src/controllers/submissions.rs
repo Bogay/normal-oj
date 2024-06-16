@@ -6,17 +6,17 @@ use loco_rs::prelude::*;
 use serde::Deserialize;
 
 use crate::{
-    models::{self, submissions, transform_db_error},
-    views::submission::SubmissionListResponse,
+    models::{self, _entities::problems, submissions, transform_db_error, users::users},
+    views::submission::{SubmissionDetailResponse, SubmissionListResponse},
     workers::submission::{SubmissionWorker, SubmissionWorkerArgs},
 };
 
 use super::find_user_by_auth;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSubmissionRequest {
     pub problem_id: i32,
-    pub timestamp: i64,
     pub language: i32,
 }
 
@@ -33,9 +33,7 @@ async fn create(
     let params = submissions::AddParams {
         user: user.id,
         problem: params.problem_id,
-        timestamp: DateTime::<Utc>::from_timestamp(params.timestamp, 0)
-            .unwrap()
-            .naive_utc(),
+        timestamp: Utc::now().naive_utc(),
         language: params.language.try_into().unwrap(),
     };
 
@@ -118,10 +116,28 @@ async fn upload_code(
     format::empty_json()
 }
 
+async fn get_one(
+    State(ctx): State<AppContext>,
+    Path(submission_id): Path<i32>,
+) -> Result<Response> {
+    let submission = submissions::Model::find_by_id(&ctx.db, submission_id).await?;
+    let user = submission
+        .find_related(models::_entities::users::Entity)
+        .one(&ctx.db)
+        .await?
+        .ok_or(ModelError::EntityNotFound)?;
+    let problem = problems::Model::find_by_id(&ctx.db, submission.problem_id).await?;
+    let tasks = problem.tasks(&ctx.db).await?;
+
+    // TODO: get tasks
+    format::json(SubmissionDetailResponse::new(&submission, &user, &tasks).done())
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("submissions")
         .add("/", get(list))
         .add("/", post(create))
         .add("/:submission_id", put(upload_code))
+        .add("/:submission_id", get(get_one))
 }

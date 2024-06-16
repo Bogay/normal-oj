@@ -1,7 +1,7 @@
 use crate::requests::create_cookie;
 
 use super::prepare_data;
-use loco_rs::{app::AppContext, prelude::cookie::Cookie, testing};
+use loco_rs::{app::AppContext, testing};
 use serde_json::json;
 use serial_test::serial;
 
