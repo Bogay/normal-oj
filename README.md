@@ -9,6 +9,7 @@ You need:
 
 - A local postgres instance
 - A local Redis instance
+- A [sandbox](https://github.com/normal-OJ/sandbox-rs) binary put in `$PATH`
 
 Check out your development [configuration](config/development.yaml).
 
@@ -49,3 +50,7 @@ started on port 3000
 ## Getting help
 
 Check out [a quick tour](https://loco.rs/docs/getting-started/tour/) or [the complete guide](https://loco.rs/docs/getting-started/guide/).
+
+## References
+
+- [Problem test case spec](https://hackmd.io/@noj/Sy68Bxcf5#Stage-1)
