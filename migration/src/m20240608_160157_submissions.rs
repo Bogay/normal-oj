@@ -76,7 +76,11 @@ impl MigrationTrait for Migration {
             .await?;
 
         manager
-            .drop_type(Type::drop().name(Alias::new("status")).to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(Alias::new("submission_status"))
+                    .to_owned(),
+            )
             .await?;
 
         manager
