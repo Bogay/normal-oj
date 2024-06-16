@@ -1,4 +1,4 @@
-use crate::requests::create_cookie;
+use crate::requests::{create_cookie, create_token};
 
 use super::prepare_data;
 use loco_rs::{app::AppContext, testing};
@@ -9,7 +9,7 @@ use normal_oj::{
     app::App,
     models::{
         problems::{self, Type, Visibility},
-        users::users,
+        users,
     },
 };
 
@@ -134,6 +134,29 @@ async fn upload_submission_code() {
             }))
             .await;
         response.assert_status_ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn get_nonexisting_submission_returns_404() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, ctx| async move {
+        testing::seed::<App>(&ctx.db).await.unwrap();
+
+        let first_admin = users::Model::find_by_username(&ctx.db, "first_admin")
+            .await
+            .unwrap();
+        let token = create_token(&first_admin, &ctx).await;
+        let cookie = create_cookie(&token);
+
+        let response = request
+            .get("/api/submissions/12345")
+            .add_cookie(cookie)
+            .await;
+        response.assert_status_not_found();
     })
     .await;
 }

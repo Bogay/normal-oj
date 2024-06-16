@@ -1,12 +1,11 @@
 use axum::{extract::Query, http::StatusCode};
 use chrono::offset::Utc;
-use chrono::DateTime;
 use format::render;
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
 use crate::{
-    models::{self, _entities::problems, submissions, transform_db_error, users::users},
+    models::{self, _entities::problems, submissions, transform_db_error},
     views::submission::{SubmissionDetailResponse, SubmissionListResponse},
     workers::submission::{SubmissionWorker, SubmissionWorkerArgs},
 };
@@ -120,7 +119,13 @@ async fn get_one(
     State(ctx): State<AppContext>,
     Path(submission_id): Path<i32>,
 ) -> Result<Response> {
-    let submission = submissions::Model::find_by_id(&ctx.db, submission_id).await?;
+    let submission = match submissions::Model::find_by_id(&ctx.db, submission_id).await {
+        Ok(s) => s,
+        Err(ModelError::EntityNotFound) => {
+            return not_found();
+        }
+        Err(e) => return Err(e.into()),
+    };
     let user = submission
         .find_related(models::_entities::users::Entity)
         .one(&ctx.db)
@@ -129,7 +134,6 @@ async fn get_one(
     let problem = problems::Model::find_by_id(&ctx.db, submission.problem_id).await?;
     let tasks = problem.tasks(&ctx.db).await?;
 
-    // TODO: get tasks
     format::json(SubmissionDetailResponse::new(&submission, &user, &tasks).done())
 }
 
