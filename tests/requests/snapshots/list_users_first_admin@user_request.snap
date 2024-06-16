@@ -10,22 +10,22 @@ expression: "response.json::<serde_json::Value>()"
   },
   "results": [
     {
-      "displayed_name": "first_admin",
+      "displayedName": "first_admin",
       "role": 0,
       "username": "first_admin"
     },
     {
-      "displayed_name": "teacher1",
+      "displayedName": "teacher1",
       "role": 2,
       "username": "teacher1"
     },
     {
-      "displayed_name": "user1",
+      "displayedName": "user1",
       "role": 1,
       "username": "user1"
     },
     {
-      "displayed_name": "user2",
+      "displayedName": "user2",
       "role": 1,
       "username": "user2"
     }

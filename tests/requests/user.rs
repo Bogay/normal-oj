@@ -10,6 +10,8 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
+use crate::requests::create_cookie;
+
 use super::{create_token, prepare_data};
 
 macro_rules! configure_insta {
@@ -26,11 +28,8 @@ async fn can_get_current_user() {
     testing::request::<App, _, _>(|request, ctx| async move {
         let user = prepare_data::init_user_login(&request, &ctx).await;
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
-        let response = request
-            .get("/api/user/current")
-            .add_header(auth_key, auth_value)
-            .await;
+        let cookie = create_cookie(&user.token);
+        let response = request.get("/api/user/current").add_cookie(cookie).await;
 
         with_settings!({
             filters => testing::cleanup_user_model()
@@ -54,11 +53,11 @@ async fn normal_user_cannot_add_user() {
             "password": "password",
         });
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let cookie = create_cookie(&user.token);
         let response = request
             .post("/api/user")
             .json(&create_user_payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
 
         with_settings!({
@@ -101,11 +100,11 @@ async fn admin_can_add_user(
             "password": password,
         });
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&token);
+        let cookie = create_cookie(&token);
         let add_user_response = request
             .post("/api/user")
             .json(&create_user_payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
 
         add_user_response.assert_status(status_code);
@@ -147,11 +146,9 @@ async fn list_users(#[case] username: &str, #[case] status_code: StatusCode) {
         let user = users::Model::find_by_username(&ctx.db, username)
             .await
             .unwrap();
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
-        let response = request
-            .get("/api/user")
-            .add_header(auth_key, auth_value)
-            .await;
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
+        let response = request.get("/api/user").add_cookie(cookie).await;
         response.assert_status(status_code);
         with_settings!({
             filters => testing::cleanup_user_model(),
@@ -179,10 +176,11 @@ async fn can_filter_user_by_role() {
         let user = users::Model::find_by_username(&ctx.db, "first_admin")
             .await
             .unwrap();
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
         let response = request
             .get("/api/user")
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .add_query_param("role", Role::Admin as i32)
             .await;
         response.assert_status_ok();
@@ -219,21 +217,23 @@ async fn can_batch_signup() {
         let user = users::Model::find_by_username(&ctx.db, "user1")
             .await
             .unwrap();
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
         let response = request
             .post("/api/auth/batch-signup")
             .json(&payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
         response.assert_status_forbidden();
 
         let user = users::Model::find_by_username(&ctx.db, "first_admin")
             .await
             .unwrap();
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
         let response = request
             .post("/api/auth/batch-signup")
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .json(&payload)
             .await;
         response.assert_status_success();
@@ -262,11 +262,12 @@ async fn non_admin_cannot_edit_user() {
         let payload = json!({
             "password": test_password,
         });
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
         let response = request
             .patch("/api/user/user2")
             .json(&payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
         response.assert_status_forbidden();
     })
@@ -287,11 +288,12 @@ async fn admin_can_edit_user() {
         let payload = json!({
             "password": test_password,
         });
-        let (auth_key, auth_value) = prepare_data::auth_header(&create_token(&user, &ctx).await);
+        let token = create_token(&user, &ctx).await;
+        let cookie = create_cookie(&token);
         let response = request
             .patch("/api/user/user2")
             .json(&payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
         response.assert_status_ok();
 

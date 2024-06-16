@@ -1,9 +1,11 @@
 use axum::http::StatusCode;
-use insta::{assert_debug_snapshot, with_settings};
+use insta::{assert_debug_snapshot, assert_json_snapshot, with_settings};
 use loco_rs::testing;
 use normal_oj::{app::App, models::users};
 use rstest::rstest;
 use serial_test::serial;
+
+use crate::requests::create_cookie;
 
 use super::prepare_data;
 
@@ -45,11 +47,19 @@ async fn can_register() {
 }
 
 #[rstest]
-#[case("login_with_valid_password", "12341234")]
-#[case("login_with_invalid_password", "invalid-password")]
+#[case("login_with_valid_password", "12341234", StatusCode::OK)]
+#[case(
+    "login_with_invalid_password",
+    "invalid-password",
+    StatusCode::UNAUTHORIZED
+)]
 #[tokio::test]
 #[serial]
-async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) {
+async fn can_login_with_verify(
+    #[case] test_name: &str,
+    #[case] password: &str,
+    #[case] expected_code: StatusCode,
+) {
     configure_insta!();
 
     testing::request::<App, _, _>(|request, ctx| async move {
@@ -80,6 +90,7 @@ async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) 
                 "password": password
             }))
             .await;
+        response.assert_status(expected_code);
 
         // Make sure email_verified_at is set
         assert!(users::Model::find_by_email(&ctx.db, email)
@@ -91,7 +102,10 @@ async fn can_login_with_verify(#[case] test_name: &str, #[case] password: &str) 
         with_settings!({
             filters => testing::cleanup_user_model()
         }, {
-            assert_debug_snapshot!(test_name, (response.status_code(), response.text()));
+            assert_json_snapshot!(
+                test_name,
+                response.json::<serde_json::Value>(),
+            );
         });
     })
     .await;
@@ -196,7 +210,7 @@ async fn can_change_password() {
         let login_data = prepare_data::init_user_login(&request, &ctx).await;
         let new_password = "here-is-a-new-password";
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&login_data.token);
+        let cookie = create_cookie(&login_data.token);
         let change_pass_payload = serde_json::json!({
             "old_password": login_data.password_plaintext,
             "new_password": new_password,
@@ -204,7 +218,7 @@ async fn can_change_password() {
         let resp = request
             .post("/api/auth/change-password")
             .json(&change_pass_payload)
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .await;
         resp.assert_status_ok();
 

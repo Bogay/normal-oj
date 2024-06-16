@@ -3,6 +3,6 @@ source: tests/requests/user.rs
 expression: "try_login_response.json::<serde_json::Value>()"
 ---
 {
-  "description": "You do not have permission to access this resource",
-  "error": "unauthorized"
+  "data": null,
+  "message": "Login Failed"
 }

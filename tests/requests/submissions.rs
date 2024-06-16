@@ -55,10 +55,8 @@ async fn create_problem(ctx: &AppContext) -> problems::Model {
 }
 
 fn create_submission_payload(problem_id: i32) -> serde_json::Value {
-    let ts = chrono::offset::Utc::now().timestamp();
     json!({
-        "problem_id": problem_id,
-        "timestamp": ts,
+        "problemId": problem_id,
         "language": 0,
     })
 }
@@ -74,10 +72,10 @@ async fn create_submission() {
         let user = prepare_data::init_user_login(&request, &ctx).await;
         let problem = create_problem(&ctx).await;
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let cookie = create_cookie(&user.token);
         let response = request
             .post("/api/submissions")
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .json(&create_submission_payload(problem.id))
             .await;
         response.assert_status_ok();
@@ -97,10 +95,8 @@ async fn upload_submission_code() {
         let problem = create_problem(&ctx).await;
 
         let cookie = create_cookie(&user.token);
-        // let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
         let response = request
             .post("/api/submissions")
-            // .add_header(auth_key, auth_value)
             .add_cookie(cookie)
             .json(&create_submission_payload(problem.id))
             .await;
@@ -125,10 +121,10 @@ async fn upload_submission_code() {
         }
         "#;
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let cookie = create_cookie(&user.token);
         let response = request
             .put(&format!("/api/submissions/{submission_id}"))
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .json(&json!({
                 "code": code,
             }))

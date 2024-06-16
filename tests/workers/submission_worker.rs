@@ -16,7 +16,6 @@ use crate::make_test_case;
 #[tokio::test]
 #[serial]
 async fn test_run_submission_worker_worker() {
-    tracing::debug!("booting");
     let boot = testing::boot_test::<App>().await.unwrap();
     let ctx = &boot.app_context;
     let db = &ctx.db;
@@ -91,7 +90,9 @@ async fn test_run_submission_worker_worker() {
 
 int main()
 {
-        puts("hello world!");
+        int a, b;
+        scanf("%d%d", &a, &b);
+        printf("%d\n", a + b);
         return 0;
 }
 "#
