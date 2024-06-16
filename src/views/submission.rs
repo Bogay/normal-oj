@@ -1,5 +1,5 @@
 use eyre::eyre;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::NojResponseBuilder;
 use crate::models::{
@@ -126,6 +126,7 @@ impl SubmissionListResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::module_name_repetitions)]
 pub struct SubmissionCaseResponse {
     exec_time: i32,
     memory_usage: i32,
@@ -134,6 +135,7 @@ pub struct SubmissionCaseResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::module_name_repetitions)]
 pub struct SubmissionTaskResponse {
     cases: Vec<SubmissionCaseResponse>,
     exec_time: i32,
@@ -144,6 +146,7 @@ pub struct SubmissionTaskResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::module_name_repetitions)]
 pub struct SubmissionDetailResponse {
     code: String,
     ip_addr: String,
@@ -161,6 +164,10 @@ pub struct SubmissionDetailResponse {
 }
 
 impl SubmissionDetailResponse {
+    /// # Panics
+    ///
+    /// When failed to deserialize submission tasks model
+    #[must_use]
     pub fn new(
         submission: &submissions::Model,
         user: &users::Model,
@@ -223,11 +230,13 @@ impl SubmissionDetailResponse {
         let resp = Self {
             code: submission.code.to_string(),
             language_type: submission.language.clone().into(),
+            #[allow(clippy::cast_precision_loss)]
             last_send: submission.last_send.and_utc().timestamp() as f64,
             problem_id: submission.problem_id,
             status: submission.status.clone().into(),
             submission_id: submission.id,
             user: UserInfoResponse::new(user),
+            #[allow(clippy::cast_precision_loss)]
             timestamp: submission.timestamp.and_utc().timestamp() as f64,
             tasks,
             // TODO: use real data

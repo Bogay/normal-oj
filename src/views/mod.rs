@@ -32,6 +32,7 @@ impl<T> NojResponseBuilder<T> {
         }
     }
 
+    #[must_use]
     pub fn message(mut self, message: String) -> Self {
         self.message = message;
         self

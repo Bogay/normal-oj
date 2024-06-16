@@ -42,6 +42,7 @@ impl ActiveModelBehavior for ActiveModel {
     // extend activemodel below (keep comment for generators)
 }
 
+#[must_use]
 pub fn status_str_to_i32(s: &str) -> i32 {
     match s {
         "AC" => 0,
@@ -62,6 +63,7 @@ impl ActiveModel {
     /// # Errors
     ///
     /// When could not save the problem into DB
+    #[allow(clippy::missing_panics_doc)]
     pub async fn update_sandbox_result<C: ConnectionTrait>(
         mut self,
         db: &C,
@@ -78,6 +80,7 @@ impl ActiveModel {
         let tasks = problem.tasks(db).await?;
 
         for (task, rs) in tasks.iter().zip(&results) {
+            #[allow(clippy::cast_sign_loss)]
             if rs.len() != task.test_case_count as usize {
                 tracing::warn!("result dismatch");
             }

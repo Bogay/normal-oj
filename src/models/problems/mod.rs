@@ -2,10 +2,7 @@ pub mod descriptions;
 pub mod tasks;
 pub mod test_case;
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, path::PathBuf};
 
 use super::_entities::{self, prelude::Problems, problems};
 use crate::models::transform_db_error;
@@ -152,6 +149,7 @@ impl _entities::problems::Model {
 
         let offset = params.offset.unwrap_or(0);
         let count = params.count.unwrap_or(10);
+        #[allow(clippy::cast_sign_loss)]
         let count = if count < 0 {
             usize::MAX
         } else {
@@ -270,6 +268,7 @@ impl _entities::problems::Model {
         Ok(())
     }
 
+    #[must_use]
     pub fn test_case_path(&self) -> Option<PathBuf> {
         self.test_case_id
             .as_ref()

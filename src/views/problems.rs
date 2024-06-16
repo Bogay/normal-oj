@@ -75,7 +75,6 @@ pub struct ProblemTaskView {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-
 pub struct ProblemDetailResponse {
     problem_name: String,
     description: ProblemDescriptionView,

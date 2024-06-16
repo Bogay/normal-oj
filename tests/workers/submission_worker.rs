@@ -46,7 +46,7 @@ async fn test_run_submission_worker_worker() {
                 test_case_count: 2,
                 score: 100,
                 time_limit: 1000,
-                memory_limit: 536870912,
+                memory_limit: 536_870_912,
             }],
         },
     )

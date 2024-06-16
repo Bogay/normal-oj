@@ -170,15 +170,15 @@ async fn login(State(ctx): State<AppContext>, Json(params): Json<LoginParams>) -
 
     let jwt_secret = ctx.config.get_jwt_config()?;
 
-    let token = match user.generate_jwt(&jwt_secret.secret, &jwt_secret.expiration) {
-        Ok(token) => token,
-        Err(_) => return login_failed(),
+    let Ok(token) = user.generate_jwt(&jwt_secret.secret, &jwt_secret.expiration) else {
+        return login_failed();
     };
     let cookie = {
         let mut c = cookie::Cookie::new("piann", &token);
         c.set_http_only(true);
         c.set_path("/");
         c.set_same_site(SameSite::Lax);
+        #[allow(clippy::cast_possible_wrap)]
         c.set_expires(
             time::OffsetDateTime::now_utc() + time::Duration::seconds(jwt_secret.expiration as i64),
         );

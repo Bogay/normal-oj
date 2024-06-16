@@ -9,7 +9,6 @@ use crate::{
 use axum::extract::{DefaultBodyLimit, Multipart, Query};
 use loco_rs::{controller::format::render, prelude::*};
 use serde::Deserialize;
-use std::path::PathBuf;
 
 use super::{find_user_by_auth, permission_denied, verify_admin};
 

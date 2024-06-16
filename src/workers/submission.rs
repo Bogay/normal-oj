@@ -10,11 +10,13 @@ use crate::models::{
 };
 
 /// Response to execute submissions
+#[allow(clippy::module_name_repetitions)]
 pub struct SubmissionWorker {
     pub ctx: AppContext,
 }
 
 #[derive(Deserialize, Debug, Serialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct SubmissionWorkerArgs {
     /// ID of submissions this work need to process
     pub submission_id: i32,
@@ -29,13 +31,14 @@ impl worker::AppWorker<SubmissionWorkerArgs> for SubmissionWorker {
 impl SubmissionWorker {
     fn preprocess(s: &str) -> impl Iterator<Item = &str> {
         s.lines()
-            .map(|l| l.trim_end())
+            .map(str::trim_end)
             // reverse because we need to strip trailing newlines
             .rev()
             .skip_while(|l| l.is_empty())
     }
 
     /// Non-strict check whther two outputs are identical.
+    #[must_use]
     pub fn compare_output(expected: &str, actual: &str) -> bool {
         Self::preprocess(expected).eq(Self::preprocess(actual))
     }
@@ -43,6 +46,7 @@ impl SubmissionWorker {
 
 #[async_trait]
 impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
+    #[allow(clippy::too_many_lines)]
     async fn perform(&self, args: SubmissionWorkerArgs) -> worker::Result<()> {
         let db = &self.ctx.db;
 
@@ -75,7 +79,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                 let mut seg = vec![];
                 for j in 0..t.test_case_count {
                     let mut rs = r.clone();
-                    rs.task_id = i as i32;
+                    rs.task_id = i.try_into().unwrap();
                     rs.case_id = j;
                     seg.push(rs);
                 }
@@ -233,7 +237,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                 config_file
                     .write_all(
                         &toml::to_string(&config)
-                            .map(|s| s.into_bytes())
+                            .map(std::string::String::into_bytes)
                             .map_err(Box::from)?,
                     )
                     .map_err(Box::from)?;
@@ -241,7 +245,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                 // invoke sandbox process
                 // TODO: configurable sandbox path
                 let sandbox_output = Command::new("sandbox")
-                    .args(["--env-path", &config_path.to_string_lossy().to_string()])
+                    .args(["--env-path", config_path.to_string_lossy().as_ref()])
                     .current_dir(&submission_dir)
                     .output();
                 match sandbox_output {
@@ -254,7 +258,7 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             stderr: String::from_utf8_lossy(&o.stderr).to_string(),
                             task_id: 0,
                             case_id: 0,
-                        })
+                        });
                     }
                     Ok(_) => {
                         let sandbox_status_raw_string = std::fs::read_to_string(&output_path)
@@ -300,9 +304,9 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             mem_usage: mem_usage_kb,
                             stdout,
                             stderr,
-                            task_id: i as i32,
+                            task_id: i.try_into().unwrap(),
                             case_id: j,
-                        })
+                        });
                     }
                     Err(e) => {
                         task_results.push(JudgeResult {
@@ -311,9 +315,9 @@ impl worker::Worker<SubmissionWorkerArgs> for SubmissionWorker {
                             mem_usage: -1,
                             stdout: String::new(),
                             stderr: e.to_string(),
-                            task_id: i as i32,
+                            task_id: i.try_into().unwrap(),
                             case_id: j,
-                        })
+                        });
                     }
                 }
             }
