@@ -1,7 +1,12 @@
-use crate::requests::{create_cookie, create_token};
+use crate::{
+    make_test_case,
+    requests::{create_cookie, create_token},
+};
 
 use super::prepare_data;
+use axum::body::Bytes;
 use loco_rs::{app::AppContext, testing};
+use sea_orm::IntoActiveModel;
 use serde_json::json;
 use serial_test::serial;
 
@@ -54,6 +59,25 @@ async fn create_problem(ctx: &AppContext) -> problems::Model {
     .unwrap()
 }
 
+async fn upload_test_case(ctx: &AppContext, problem: &problems::Model) {
+    let test_case_id = uuid::Uuid::new_v4();
+    let problem = problem
+        .clone()
+        .into_active_model()
+        .update_test_case_id(&ctx.db, Some(test_case_id.to_string()))
+        .await
+        .unwrap();
+
+    let file_content = make_test_case(&ctx.db, &problem).await.unwrap();
+    let file_content = Bytes::from(file_content);
+    let path = problem.test_case_path().unwrap();
+    ctx.storage
+        .as_ref()
+        .upload(path.as_path(), &file_content)
+        .await
+        .unwrap();
+}
+
 fn create_submission_payload(problem_id: i32) -> serde_json::Value {
     json!({
         "problemId": problem_id,
@@ -93,6 +117,7 @@ async fn upload_submission_code() {
 
         let user = prepare_data::init_user_login(&request, &ctx).await;
         let problem = create_problem(&ctx).await;
+        upload_test_case(&ctx, &problem).await;
 
         let cookie = create_cookie(&user.token);
         let response = request
