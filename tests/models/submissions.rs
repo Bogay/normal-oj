@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 use loco_rs::testing;
 use normal_oj::app::App;
-=======
-use normal_oj::app::App;
-use loco_rs::testing;
->>>>>>> 1d15295 (feat: add submission)
 use serial_test::serial;
 
 macro_rules! configure_insta {
