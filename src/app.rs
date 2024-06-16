@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use loco_rs::{
@@ -109,7 +109,11 @@ impl Hooks for App {
         let store = if ctx.environment == Environment::Test {
             storage::drivers::mem::new()
         } else {
-            storage::drivers::local::new_with_prefix("storage").map_err(Box::from)?
+            let path = PathBuf::from("storage");
+            if !path.exists() {
+                std::fs::create_dir(&path)?;
+            }
+            storage::drivers::local::new_with_prefix("storage")?
         };
 
         Ok(AppContext {
