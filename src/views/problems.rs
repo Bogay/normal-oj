@@ -1,4 +1,5 @@
 use num_traits::FromPrimitive;
+use sea_orm::entity::prelude::DateTime;
 use serde::Serialize;
 
 use crate::models::{
@@ -9,10 +10,12 @@ use crate::models::{
 use super::NojResponseBuilder;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProblemListResponseItem {
     pub id: i32,
     pub name: String,
     pub status: Visibility,
+    #[serde(rename = "ACUser")]
     pub ac_user: i32,
     pub submitter: i32,
     pub tags: Vec<String>,
@@ -49,10 +52,32 @@ impl ProblemListResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProblemDescriptionView {
+    pub description: String,
+    pub input: String,
+    pub output: String,
+    pub hint: String,
+    pub sample_input: Vec<String>,
+    pub sample_output: Vec<String>,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProblemTaskView {
+    pub test_case_count: i32,
+    pub score: i32,
+    pub time_limit: i32,
+    pub memory_limit: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProblemDetailResponse {
-    // TODO: add fields
     problem_name: String,
-    description: problems::descriptions::Model,
+    description: ProblemDescriptionView,
     /// username of problem owner
     owner: String,
     tags: Vec<String>,
@@ -62,7 +87,7 @@ pub struct ProblemDetailResponse {
     quota: i32,
     status: Visibility,
     r#type: Type,
-    test_case: Vec<problems::tasks::Model>,
+    test_case: Vec<ProblemTaskView>,
     submit_count: i32,
     high_score: i32,
 }
@@ -77,9 +102,46 @@ impl ProblemDetailResponse {
         owner: &users::Model,
         tasks: &[problems::tasks::Model],
     ) -> NojResponseBuilder<Self> {
+        let problems::descriptions::Model {
+            description,
+            input,
+            output,
+            hint,
+            sample_input,
+            sample_output,
+            created_at,
+            updated_at,
+            ..
+        } = description.clone();
+        let to_task_view = |t: &problems::tasks::Model| {
+            let problems::tasks::Model {
+                test_case_count,
+                score,
+                time_limit,
+                memory_limit,
+                ..
+            } = t.clone();
+
+            ProblemTaskView {
+                test_case_count,
+                score,
+                time_limit,
+                memory_limit,
+            }
+        };
+
         let resp = Self {
             problem_name: problem.name.clone(),
-            description: description.clone(),
+            description: ProblemDescriptionView {
+                description,
+                input,
+                output,
+                hint,
+                sample_input,
+                sample_output,
+                created_at,
+                updated_at,
+            },
             owner: owner.name.clone(),
             tags: vec![],
             allowed_language: problem.allowed_language,
@@ -87,7 +149,7 @@ impl ProblemDetailResponse {
             quota: problem.quota,
             status: Visibility::from_i32(problem.status).unwrap(),
             r#type: Type::from_i32(problem.r#type).unwrap(),
-            test_case: tasks.to_vec(),
+            test_case: tasks.iter().map(to_task_view).collect(),
             submit_count: 0,
             high_score: 0,
         };

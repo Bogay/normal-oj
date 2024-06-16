@@ -1,21 +1,21 @@
-use axum::extract::Query;
+use axum::{extract::Query, http::StatusCode};
 use chrono::offset::Utc;
-use chrono::DateTime;
 use format::render;
 use loco_rs::prelude::*;
 use serde::Deserialize;
 
 use crate::{
-    models::{self, submissions, transform_db_error},
-    views::submission::SubmissionListResponse,
+    models::{self, _entities::problems, submissions, transform_db_error},
+    views::submission::{SubmissionDetailResponse, SubmissionListResponse},
+    workers::submission::{SubmissionWorker, SubmissionWorkerArgs},
 };
 
 use super::find_user_by_auth;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSubmissionRequest {
     pub problem_id: i32,
-    pub timestamp: i64,
     pub language: i32,
 }
 
@@ -32,9 +32,7 @@ async fn create(
     let params = submissions::AddParams {
         user: user.id,
         problem: params.problem_id,
-        timestamp: DateTime::<Utc>::from_timestamp(params.timestamp, 0)
-            .unwrap()
-            .naive_utc(),
+        timestamp: Utc::now().naive_utc(),
         language: params.language.try_into().unwrap(),
     };
 
@@ -85,24 +83,58 @@ async fn list(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateSubmissionResultRequest {
-    pub score: i32,
-    pub exec_time: i32,
-    pub memory_usage: i32,
+pub struct UpdateSubmissionRequest {
+    pub code: String,
 }
 
-async fn update_sandbox_result(
+async fn upload_code(
     State(ctx): State<AppContext>,
     Path(submission_id): Path<i32>,
-    Json(params): Json<UpdateSubmissionResultRequest>,
+    Json(params): Json<UpdateSubmissionRequest>,
 ) -> Result<Response> {
     let submission = submissions::Model::find_by_id(&ctx.db, submission_id).await?;
-    submission
+    let submission = submission
         .into_active_model()
-        .update_sandbox_result(&ctx.db, params.score, params.exec_time, params.memory_usage)
+        .update_code(&ctx.db, params.code)
         .await?;
 
+    if let Err(e) = SubmissionWorker::perform_later(
+        &ctx,
+        SubmissionWorkerArgs {
+            submission_id: submission.id,
+        },
+    )
+    .await
+    {
+        tracing::error!(err = ?e, "failed to created submission work");
+        return format::render()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .empty();
+    }
+
     format::empty_json()
+}
+
+async fn get_one(
+    State(ctx): State<AppContext>,
+    Path(submission_id): Path<i32>,
+) -> Result<Response> {
+    let submission = match submissions::Model::find_by_id(&ctx.db, submission_id).await {
+        Ok(s) => s,
+        Err(ModelError::EntityNotFound) => {
+            return not_found();
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let user = submission
+        .find_related(models::_entities::users::Entity)
+        .one(&ctx.db)
+        .await?
+        .ok_or(ModelError::EntityNotFound)?;
+    let problem = problems::Model::find_by_id(&ctx.db, submission.problem_id).await?;
+    let tasks = problem.tasks(&ctx.db).await?;
+
+    format::json(SubmissionDetailResponse::new(&submission, &user, &tasks).done())
 }
 
 pub fn routes() -> Routes {
@@ -110,5 +142,6 @@ pub fn routes() -> Routes {
         .prefix("submissions")
         .add("/", get(list))
         .add("/", post(create))
-        .add("/:submission_id", put(update_sandbox_result))
+        .add("/:submission_id", put(upload_code))
+        .add("/:submission_id", get(get_one))
 }

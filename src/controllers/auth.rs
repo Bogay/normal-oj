@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use cookie::SameSite;
 use loco_rs::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -9,8 +10,10 @@ use crate::{
         _entities::courses,
         users::{self, LoginParams, RegisterParams, Role},
     },
-    views::auth::LoginResponse,
+    views::{auth::LoginResponse, user::UserInfoResponse, NojResponseBuilder},
 };
+
+use super::find_user_by_auth;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VerifyParams {
@@ -136,14 +139,21 @@ async fn reset(State(ctx): State<AppContext>, Json(params): Json<ResetParams>) -
     format::json(())
 }
 
-/// Creates a user login and returns a token
+/// Creates a user login and returns a token (also set cookie)
 async fn login(State(ctx): State<AppContext>, Json(params): Json<LoginParams>) -> Result<Response> {
+    let login_failed = || {
+        format::render().status(StatusCode::UNAUTHORIZED).json(
+            NojResponseBuilder::new(())
+                .message("Login Failed".to_string())
+                .done(),
+        )
+    };
     let query_result = match users::Model::find_by_email(&ctx.db, &params.username).await {
         Ok(u) => Ok(u),
         Err(_) => users::Model::find_by_username(&ctx.db, &params.username).await,
     }
     .map_err(|e| match e {
-        ModelError::EntityNotFound => unauthorized("unauthorized"),
+        ModelError::EntityNotFound => login_failed(),
         _ => Err(loco_rs::Error::Any(e.into())),
     });
 
@@ -155,16 +165,28 @@ async fn login(State(ctx): State<AppContext>, Json(params): Json<LoginParams>) -
     let valid = user.verify_password(&params.password);
 
     if !valid {
-        return unauthorized("unauthorized!");
+        return login_failed();
     }
 
     let jwt_secret = ctx.config.get_jwt_config()?;
 
-    let token = user
-        .generate_jwt(&jwt_secret.secret, &jwt_secret.expiration)
-        .or_else(|_| unauthorized("unauthorized!"))?;
-
-    format::json(LoginResponse::new(&user, &token))
+    let Ok(token) = user.generate_jwt(&jwt_secret.secret, &jwt_secret.expiration) else {
+        return login_failed();
+    };
+    let cookie = {
+        let mut c = cookie::Cookie::new("piann", &token);
+        c.set_http_only(true);
+        c.set_path("/");
+        c.set_same_site(SameSite::Lax);
+        #[allow(clippy::cast_possible_wrap)]
+        c.set_expires(
+            time::OffsetDateTime::now_utc() + time::Duration::seconds(jwt_secret.expiration as i64),
+        );
+        c
+    };
+    format::render()
+        .cookies(&[cookie])?
+        .json(LoginResponse::new(&user, &token))
 }
 
 async fn change_password(
@@ -266,15 +288,26 @@ async fn batch_signup(
     format::render().status(StatusCode::CREATED).empty()
 }
 
+async fn me(State(ctx): State<AppContext>, auth: auth::JWT) -> Result<Response> {
+    let user = match find_user_by_auth(&ctx, &auth).await {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+
+    format::json(NojResponseBuilder::new(UserInfoResponse::new(&user)).done())
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("auth")
         .add("/register", post(register))
         .add("/verify", post(verify))
         .add("/login", post(login))
+        .add("/session", post(login))
         .add("/forgot", post(forgot))
         .add("/reset", post(reset))
         .add("/change-password", post(change_password))
         .add("/check/:item", post(check))
         .add("/batch-signup", post(batch_signup))
+        .add("/me", get(me))
 }

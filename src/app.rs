@@ -54,9 +54,11 @@ impl Hooks for App {
             .add_route(controllers::auth::routes())
             .add_route(controllers::user::routes())
             .add_route(controllers::submissions::routes())
+            .add_route(controllers::mock::routes())
     }
 
     fn connect_workers<'a>(p: &'a mut Processor, ctx: &'a AppContext) {
+        p.register(crate::workers::submission::SubmissionWorker::build(ctx));
         p.register(DownloadWorker::build(ctx));
     }
 

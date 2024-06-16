@@ -1,5 +1,12 @@
+use crate::{
+    make_test_case,
+    requests::{create_cookie, create_token},
+};
+
 use super::prepare_data;
+use axum::body::Bytes;
 use loco_rs::{app::AppContext, testing};
+use sea_orm::IntoActiveModel;
 use serde_json::json;
 use serial_test::serial;
 
@@ -7,7 +14,7 @@ use normal_oj::{
     app::App,
     models::{
         problems::{self, Type, Visibility},
-        users::users,
+        users,
     },
 };
 
@@ -52,11 +59,28 @@ async fn create_problem(ctx: &AppContext) -> problems::Model {
     .unwrap()
 }
 
+async fn upload_test_case(ctx: &AppContext, problem: &problems::Model) {
+    let test_case_id = uuid::Uuid::new_v4();
+    let problem = problem
+        .clone()
+        .into_active_model()
+        .update_test_case_id(&ctx.db, Some(test_case_id.to_string()))
+        .await
+        .unwrap();
+
+    let file_content = make_test_case(&ctx.db, &problem).await.unwrap();
+    let file_content = Bytes::from(file_content);
+    let path = problem.test_case_path().unwrap();
+    ctx.storage
+        .as_ref()
+        .upload(path.as_path(), &file_content)
+        .await
+        .unwrap();
+}
+
 fn create_submission_payload(problem_id: i32) -> serde_json::Value {
-    let ts = chrono::offset::Utc::now().timestamp();
     json!({
-        "problem_id": problem_id,
-        "timestamp": ts,
+        "problemId": problem_id,
         "language": 0,
     })
 }
@@ -72,13 +96,88 @@ async fn create_submission() {
         let user = prepare_data::init_user_login(&request, &ctx).await;
         let problem = create_problem(&ctx).await;
 
-        let (auth_key, auth_value) = prepare_data::auth_header(&user.token);
+        let cookie = create_cookie(&user.token);
         let response = request
             .post("/api/submissions")
-            .add_header(auth_key, auth_value)
+            .add_cookie(cookie)
             .json(&create_submission_payload(problem.id))
             .await;
         response.assert_status_ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn upload_submission_code() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, ctx| async move {
+        testing::seed::<App>(&ctx.db).await.unwrap();
+
+        let user = prepare_data::init_user_login(&request, &ctx).await;
+        let problem = create_problem(&ctx).await;
+        upload_test_case(&ctx, &problem).await;
+
+        let cookie = create_cookie(&user.token);
+        let response = request
+            .post("/api/submissions")
+            .add_cookie(cookie)
+            .json(&create_submission_payload(problem.id))
+            .await;
+        response.assert_status_ok();
+        let submission_id = response
+            .json::<serde_json::Value>()
+            .as_object()
+            .unwrap()
+            .get("id")
+            .unwrap()
+            .as_i64()
+            .unwrap();
+
+        let code = r#"#include <stdio.h>
+        int main()
+        {
+            int a, b;
+            scanf("%d%d", &a, &b);
+            printf("%d\n", a + b);
+
+            return 0;
+        }
+        "#;
+
+        let cookie = create_cookie(&user.token);
+        let response = request
+            .put(&format!("/api/submissions/{submission_id}"))
+            .add_cookie(cookie)
+            .json(&json!({
+                "code": code,
+            }))
+            .await;
+        response.assert_status_ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn get_nonexisting_submission_returns_404() {
+    configure_insta!();
+
+    testing::request::<App, _, _>(|request, ctx| async move {
+        testing::seed::<App>(&ctx.db).await.unwrap();
+
+        let first_admin = users::Model::find_by_username(&ctx.db, "first_admin")
+            .await
+            .unwrap();
+        let token = create_token(&first_admin, &ctx).await;
+        let cookie = create_cookie(&token);
+
+        let response = request
+            .get("/api/submissions/12345")
+            .add_cookie(cookie)
+            .await;
+        response.assert_status_not_found();
     })
     .await;
 }

@@ -23,6 +23,7 @@ pub struct Model {
     pub last_send: DateTime,
     pub status: SubmissionStatus,
     pub language: Language,
+    pub tasks: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

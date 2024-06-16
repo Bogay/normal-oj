@@ -123,4 +123,7 @@ auth:
     secret: 7pg32BeSaRas3fFJyXfy
     # Token expiration time in seconds
     expiration: 604800 # 7 days
-
+    # load jwt token from cookie
+    location:
+      from: Cookie
+      name: piann

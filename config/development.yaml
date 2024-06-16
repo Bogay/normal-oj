@@ -112,7 +112,7 @@ database:
   dangerously_recreate: false
 
 # Redis Configuration
-redis:
+queue:
   # Redis connection URI
   uri: {{ get_env(name="REDIS_URL", default="redis://127.0.0.1") }}
   # Dangerously flush all data in Redis on startup. dangerous operation, make sure that you using this flag only on dev environments or test mode
@@ -126,4 +126,8 @@ auth:
     secret: 4OSoMBNifs1jdpr1iUyG
     # Token expiration time in seconds
     expiration: 604800 # 7 days
+    # load jwt token from cookie
+    location:
+      from: Cookie
+      name: piann
 
